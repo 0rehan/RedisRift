@@ -1,0 +1,20 @@
+# Build directories and generated binaries
+build/
+bin/
+*.exe
+*.out
+*.app
+*.o
+*.obj
+
+# Database log and runtime files
+*.aof
+appendonly.aof
+
+# IDE and OS files
+.vscode/
+.vs/
+.idea/
+.DS_Store
+Thumbs.db
+
