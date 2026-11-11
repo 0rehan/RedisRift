@@ -18,3 +18,9 @@ appendonly.aof
 .DS_Store
 Thumbs.db
 
+# Node.js and build artifacts
+node_modules/
+dist/
+package-lock.json
+
+
