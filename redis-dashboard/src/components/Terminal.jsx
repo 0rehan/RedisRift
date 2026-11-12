@@ -2,6 +2,19 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import '@xterm/xterm/css/xterm.css';
 
+const REDIS_COMMANDS = [
+  'PING',
+  'SET',
+  'GET',
+  'DEL',
+  'EXPIRE',
+  'ECHO',
+  'KEYS',
+  'INFO',
+  'DBSIZE',
+  'CLEAR',
+];
+
 // Parses command string into tokens, supporting double and single quotes
 function parseCommandLine(text) {
   const tokens = [];
@@ -26,7 +39,14 @@ function Terminal() {
   const [status, setStatus] = useState('connecting');
   const timeoutRef = useRef(null);
 
+  // Command History tracking
+  const historyRef = useRef([]);
+  const historyIndexRef = useRef(-1);
+
   useEffect(() => {
+    if (!termRef.current) return;
+    termRef.current.innerHTML = '';
+
     // 1. Initialize XTerm instance
     const term = new XTerm({
       cursorBlink: true,
@@ -65,12 +85,10 @@ function Terminal() {
       term.write('\x1b[1;32mredis>\x1b[0m ');
     };
 
-    if (termRef.current) {
-      term.open(termRef.current);
-      term.writeln('\x1b[1;36m=== RedisRift Interactive Web Terminal ===\x1b[0m');
-      term.writeln('Type commands: \x1b[33mPING\x1b[0m, \x1b[33mSET mykey "hello"\x1b[0m, \x1b[33mGET mykey\x1b[0m, \x1b[33mDEL mykey\x1b[0m');
-      term.write('\r\n\x1b[90mConnecting to bridge...\x1b[0m');
-    }
+    term.open(termRef.current);
+    term.writeln('\x1b[1;36m=== RedisRift Interactive Web Terminal ===\x1b[0m');
+    term.writeln('Shortcuts: \x1b[33m↑/↓\x1b[0m for history, \x1b[33mTab\x1b[0m for autocomplete, \x1b[33mCtrl+L\x1b[0m to clear');
+    term.write('\r\n\x1b[90mConnecting to bridge...\x1b[0m');
 
     // 2. Connect to Bridge WebSocket
     const connectWs = () => {
@@ -95,7 +113,6 @@ function Terminal() {
 
       ws.onclose = () => {
         setStatus('fallback');
-        // Do not spam terminal with retry messages, just use HTTP fallback
         setTimeout(connectWs, 3000);
       };
 
@@ -110,7 +127,6 @@ function Terminal() {
     let inputBuffer = '';
 
     const executeCommand = async (tokens) => {
-      // If WebSocket is open, send via WebSocket
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({ cmd: tokens }));
 
@@ -140,12 +156,28 @@ function Terminal() {
 
     const disposable = term.onData((data) => {
       // Enter Key
-      if (data === '\r') {
+      if (data === '\r' || data === '\n') {
         term.write('\r\n');
         const trimmed = inputBuffer.trim();
         inputBuffer = '';
 
         if (!trimmed) {
+          term.write('\x1b[1;32mredis>\x1b[0m ');
+          return;
+        }
+
+        // Add to command history
+        if (
+          historyRef.current.length === 0 ||
+          historyRef.current[historyRef.current.length - 1] !== trimmed
+        ) {
+          historyRef.current.push(trimmed);
+        }
+        historyIndexRef.current = historyRef.current.length;
+
+        // Custom local commands (e.g. CLEAR)
+        if (trimmed.toUpperCase() === 'CLEAR') {
+          term.clear();
           term.write('\x1b[1;32mredis>\x1b[0m ');
           return;
         }
@@ -157,6 +189,44 @@ function Terminal() {
         }
 
         executeCommand(tokens);
+        return;
+      }
+
+      // Tab Key (Autocomplete)
+      if (data === '\t') {
+        const currentTrim = inputBuffer.trimStart();
+        if (currentTrim && !currentTrim.includes(' ')) {
+          const upper = currentTrim.toUpperCase();
+          const match = REDIS_COMMANDS.find((c) => c.startsWith(upper));
+          if (match) {
+            inputBuffer = match + ' ';
+            term.write('\r\x1b[K\x1b[1;32mredis>\x1b[0m ' + inputBuffer);
+          }
+        }
+        return;
+      }
+
+      // Up Arrow: History backward
+      if (data === '\x1b[A') {
+        if (historyRef.current.length > 0 && historyIndexRef.current > 0) {
+          historyIndexRef.current -= 1;
+          inputBuffer = historyRef.current[historyIndexRef.current];
+          term.write('\r\x1b[K\x1b[1;32mredis>\x1b[0m ' + inputBuffer);
+        }
+        return;
+      }
+
+      // Down Arrow: History forward
+      if (data === '\x1b[B') {
+        if (historyIndexRef.current < historyRef.current.length - 1) {
+          historyIndexRef.current += 1;
+          inputBuffer = historyRef.current[historyIndexRef.current];
+          term.write('\r\x1b[K\x1b[1;32mredis>\x1b[0m ' + inputBuffer);
+        } else if (historyIndexRef.current === historyRef.current.length - 1) {
+          historyIndexRef.current = historyRef.current.length;
+          inputBuffer = '';
+          term.write('\r\x1b[K\x1b[1;32mredis>\x1b[0m ');
+        }
         return;
       }
 
@@ -172,6 +242,7 @@ function Terminal() {
       // Ctrl + C (Cancel current line)
       if (data === '\u0003') {
         inputBuffer = '';
+        historyIndexRef.current = historyRef.current.length;
         term.write('^C\r\n\x1b[1;32mredis>\x1b[0m ');
         return;
       }
@@ -183,8 +254,8 @@ function Terminal() {
         return;
       }
 
-      // Printable Characters
-      if (data.length === 1 && data >= ' ') {
+      // Printable Characters (ignores other unhandled ANSI sequences starting with \x1b)
+      if (!data.startsWith('\x1b') && data >= ' ') {
         inputBuffer += data;
         term.write(data);
       }
@@ -196,6 +267,7 @@ function Terminal() {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       if (wsRef.current) wsRef.current.close();
       term.dispose();
+      if (termRef.current) termRef.current.innerHTML = '';
     };
   }, []);
 
