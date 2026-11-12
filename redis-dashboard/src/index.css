@@ -6,25 +6,92 @@
   * {
     border-color: rgb(30 41 59 / 0.8);
   }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     background-color: #090d16;
     color: #f8fafc;
     font-family: 'Inter', system-ui, sans-serif;
   }
+
+  /* Focus-visible ring styles */
+  *:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(244, 63, 94, 0.5);
+    border-radius: 4px;
+  }
+
+  /* Default transition for interactive elements */
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    transition: all 0.2s ease;
+  }
+}
+
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out forwards;
+  }
+
+  .animate-slide-in {
+    animation: slideIn 0.3s ease-out forwards;
+  }
+
+  .glass {
+    background: rgba(15, 23, 42, 0.7);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(51, 65, 85, 0.5);
+  }
+
+  .gradient-border {
+    position: relative;
+    border: none;
+  }
+
+  .gradient-border::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(244, 63, 94, 0.5), rgba(139, 92, 246, 0.5), rgba(56, 189, 248, 0.5));
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
 }
 
 /* Custom sleek scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
+
 ::-webkit-scrollbar-track {
-  background: #090d16;
+  background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
-  border-radius: 4px;
+  background: rgba(30, 41, 59, 0.6);
+  border-radius: 3px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: rgba(51, 65, 85, 0.8);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(30, 41, 59, 0.6) transparent;
 }
